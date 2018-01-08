@@ -35,17 +35,18 @@ using namespace std;
 
 
 
-typedef map<int, map<int, int > > REGIONS_MAP;
+ typedef map<int, map<int, int > > REGIONS_MAP;
 REGIONS_MAP regions;
 map<int, vector<pair<int, int> > > regions_index;
 
 void read_Regions(const char *f)
 {
-	FILE *fp = fopen(f,"r");
+ 	FILE *fp = fopen(f,"r");
 	int c,line=90;
         
 	while(fscanf(fp,"%d",&c) != EOF){
 		regions[line][0] = c;
+		regions_index[c].push_back(make_pair<int, int>(line,0));	
 		for(size_t i=1;i<144;++i)
 		{
 			fscanf(fp,"%d",&c);
@@ -82,26 +83,16 @@ int main(int argc, char *argv[])
     da_config.Initialize(argv[1],dc,fc);
     /* load  REGIONS*/
     read_Regions(argv[2]);
-    /* load Region 22's center*/
-    vector<pair<int,int> > R_c;
-    int a,b,c;
-    FILE *fp2 = fopen(argv[3],"r");
-    while(fscanf(fp2, "%d %d %d", &(a), &(b), &(c)) != EOF){
-	    R_c.push_back(make_pair<int,int>(b,c));
-    }
-    fclose(fp2);
     /*****************************************************
      * Set up the initial state vector x (SCALING FACTOR)
      *****************************************************/
-    vector<double> x_init(dc.M, 1.0);
     /*
      * generate the first ensemble of state vector x 
      *
      *  DONE by PROCESS-0, then broadcast to MPI_COMM_WORLD
      */
-    statevector<double> x_b_lagMembers(dc.nlag , dc.Class * dc.F, dc.K);
-    statevector<double> scal_x_a(dc.nlag, dc.XSIZE * dc.YSIZE * dc.F, dc.K);
-    MatrixXf x_b(dc.M, dc.K);
+    statevector<double> x_b_lagMembers(dc.nlag , dc.Class, dc.K);
+    statevector<double> scal_x_a(dc.nlag, dc.XSIZE * dc.YSIZE, dc.K);
     OBS_DATA obs;
     /************************************************
      *
@@ -116,12 +107,26 @@ int main(int argc, char *argv[])
      *
      ************************************************/
     clock_t time_first = clock(),time_second;
+     
+   
+    /************************************************
+     *  prepare observation's rand value
+     *
+     * *********************************************/ 
+     /*map<int,vector<double> > obs_rand;
+     for(size_t i = 0;i < 551; ++i)
+     {
+        vector<double> rands(551);
+	vector_randn_boost(rands, 551, 0, 0.01, -0.1, 0.1);
+     	obs_rand[i] = rands;
+     }*/
+
     for(datetime DA_i = dc.start_date; DA_i < dc.end_date; DA_i += timespan(0,0,0,0,dc.DA_length)){
 
         /* set up time */
  	datetime DA_start = DA_i;
         datetime DA_end   = DA_i + timespan(0,0,0,0, dc.DA_length);
-        datetime DA_end_lag   = DA_i - timespan(0,0,0,0, dc.DA_length * dc.nlag);
+        datetime DA_end_lag   = DA_i + timespan(0,0,0,0, dc.DA_length * dc.nlag);
         double   tau_start= DA_start.tau();
         double   tau_end  = DA_end  .tau();
 	double   tau_end_lag =DA_end_lag.tau();
@@ -133,9 +138,9 @@ int main(int argc, char *argv[])
          ************************/
 	 obs_c DA_Obs;
  	 obs = DA_Obs.Initialize(DA_start, DA_end, dc, fc);
-	 MatrixXf R = DA_Obs.Get_R(obs); 	
+	 map<int, double> R = DA_Obs.Get_R(obs); 
         /* build up index to speed up searching */
-        OBS_INDEX obs_index = build_index(obs);
+	OBS_INDEX obs_index = build_index(obs);
 	/****************************
 	 * statevector to grid
 	 *
@@ -143,12 +148,10 @@ int main(int argc, char *argv[])
 	 char mk_str[128];
             
     	if(mpi_rank == 0) {
-	    if(DA_i == dc.start_date)
-	    {
        	    	sprintf(mk_str, "mkdir %s/diagnose", fc.DA_dir);
             	cmd(mk_str);
-	    }
-            	sprintf(mk_str, "statevector.%s.nc", DA_i.str("YYYYMMDDhhmmss").c_str());
+            	
+		sprintf(mk_str, "statevector.%s.nc", DA_i.str("YYYYMMDDhhmmss").c_str());
     	    	bool flag = x_b_lagMembers.save_apri_vector(mk_str);	
 	    }   
 	    scal_x_a = x_b_lagMembers.state2grid(regions, dc); 
@@ -165,7 +168,8 @@ int main(int argc, char *argv[])
    	 
 	    MPI_Barrier(MPI_COMM_WORLD);
 	 
-    	    double *x_b_p = (double*)malloc( dc.nlag * dc.Class * dc.F * dc.K * sizeof(double));
+    
+	    double *x_b_p = (double*)malloc( dc.nlag * dc.Class * dc.K * sizeof(double));
 	
 	if(mpi_rank == 0){
           
@@ -188,14 +192,20 @@ int main(int argc, char *argv[])
 		optimize OP;
 		OP.Initialize(x_b_lagMembers, obs, dc);
 		MatrixXf x_b_bar(dc.M, 1); 
-		x_b_lagMembers = OP.Run(dc, obs, R, x_b_bar, regions, regions_index,tau_start);	
+		x_b_lagMembers = OP.Run(dc, obs, R, x_b_bar, regions, regions_index,tau_start,fc,DA_start,DA_end);	
 		     /*****************
  		     *
                      * STEP 5 generate all_scaling
                      * ***************/
 		    debug("generate all scaling");
-            	    vector<double> scal_posterior_x_a(dc.XSIZE * dc.YSIZE * dc.F);
+            	    vector<double> scal_posterior_x_a(dc.XSIZE * dc.YSIZE);
 		    scal_posterior_x_a = poststate2grid(regions, x_b_bar, dc);
+		     OBS_Operation.Run_posterior(dc, fc,scal_posterior_x_a,obs,DA_start,DA_end);
+            	    for(size_t i = 0;i < dc.K; ++i)
+		    {
+		     	sprintf(mk_str, "cp %s/posterior/restart.%s %s/ensemble-%.3lu/", fc.DA_dir,DA_end.str("YYYYMMDDhhmm").c_str(), fc.DA_dir, i);
+            	    	cmd(mk_str);
+		    }
 		    /******************
  		     *STEP 6 Propagate
  		     *****************/
@@ -207,7 +217,7 @@ int main(int argc, char *argv[])
 		    
 		    debug("propagate");
 
-		    //bool rt = x_b_lagMembers.Propagate(dc,regions_index);
+		    bool rt = x_b_lagMembers.Propagate(dc);
     		   		    
 		    x_b_p = x_b_lagMembers.expand();
 		    //debug(x_b_p);
@@ -230,18 +240,26 @@ int main(int argc, char *argv[])
 					P_a[i][j] = P_b[i][j];
 			}
 		    debug(P_a);*/
-		     OBS_Operation.Run_posterior(dc, fc,scal_posterior_x_a,obs,DA_start,DA_end);
+	    
+
+		      
 		}	
    		else{
    		//debug(x_b_p); 
 		MPI_Bcast(x_b_p, dc.M * dc.K, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		reverse_expand(x_b_lagMembers,x_b_p, dc.nlag, dc.Class * dc.F,dc.K);
+		reverse_expand(x_b_lagMembers,x_b_p, dc.nlag, dc.Class,dc.K);
 	 
 		}
    	 	MPI_Barrier(MPI_COMM_WORLD);
-
-	    }// END OF DA CYCLE
 		
+	    	/*scal_x_a = x_b_lagMembers.state2grid(regions, dc); 
+		OBS_Operation.update_restart(dc,fc,mpic,mpi_rank,scal_x_a,obs,DA_start, DA_end, DA_end_lag);	
+   	 	MPI_Barrier(MPI_COMM_WORLD);*/
+	    	
+		free(x_b_p);
+	    }// END OF DA CYCLE
+	 	
+	    //x_b_p = NULL;
 	    MPI_Finalize();
 	    return 0;
 	}

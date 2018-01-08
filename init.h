@@ -61,65 +61,32 @@ class DAConfig{
 		dc.rho = atof(DA_config["inflation"].c_str());
 
 		dc.Class = atoi(DA_config["Class"].c_str());
-		dc.M = dc.Class * dc.nlag * dc.F;
+		dc.M = dc.Class * dc.nlag;
 
-		dc.grid_M = dc.XSIZE * dc.YSIZE * dc.nlag * dc.F;	
+		dc.grid_M = dc.XSIZE * dc.YSIZE * dc.nlag;	
 	}
 
 
 
 };	
 
-/*template<typename mT>
-void get_covariance(map<int,vector<pair<int,int> > >& regions_index, vector< vector<mT> >& COV,const int YSIZE)
-{
-	matrix<double> cov = COV;
-	int a_x,a_y,b_x,b_y;
-	for(size_t i = 0;i < cov.nrow();++i)
-	{
-		if(i  < 200)
-			cov[i][i] = 0.64;
-		else
-			cov[i][i] = 0.16;
-	}
-	for(size_t i = 0;i < cov.nrow();++i)
-		for(size_t j = 0;j < i;++j)
-	{
-		for(size_t x = 0;x < YSIZE;++x){
-			if(regions_index[i][x] != 0){
-				a_x =  x; 
-				a_y = regions_index[i][x];
-			}
-		}	
-		for(size_t x = 0;x < YSIZE;++x){
-			if(regions_index[j][x] != 0){
-				b_x =  x; 
-				b_y = regions_index[j][x];
-			}
-		}	
-		int L = sqrt(pow(a_x - b_x,2) +  pow(a_y - b_y,2));
-		(i < 200)?cov[i][j] = cov[j][i] = 0.64 * exp(-L/7):cov[i][j] = cov[j][i] = 0.16 * exp(-L/10);
-
-	}
-	//debug(cov);
-	COV = cov;
-}*/
 	
 statevector<double> generate_x(int mpi_rank, daconfig dc,map<int,vector<pair<int,int> > >& regions_index)
 {
-    		double *x_b_p = (double*)malloc(dc.nlag * dc.F * dc.Class * dc.K * sizeof(double));
-    		statevector<double> x_b_lagMembers(dc.nlag, dc.Class * dc.F, dc.K);
+    		double *x_b_b = (double*)malloc(dc.nlag * dc.Class * dc.K * sizeof(double));
+    		statevector<double> x_b_lagMembers(dc.nlag, dc.Class, dc.K);
 		if(mpi_rank == 0) {
 			x_b_lagMembers.Initialization(dc,regions_index);
-	    		//x_b_lagMembers = readvector("/data1/xubx/GEOS-Chem/tools/xbx_EnSRF7/diagnose/statevector.20100903000000.nc",dc); 
-			x_b_p = x_b_lagMembers.expand();
-	    		MPI_Bcast(x_b_p, dc.nlag * dc.F * dc.Class * dc.K, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			//x_b_lagMembers = readvector("/data1/xubx/GEOS-Chem/tools/main_experience_P_a_test/statevector.20050917000000.nc",dc); 
+			x_b_b = x_b_lagMembers.expand();
+			MPI_Bcast(x_b_b, dc.nlag * dc.Class * dc.K, MPI_DOUBLE, 0, MPI_COMM_WORLD);
    		}
    		else{
-    
-    			MPI_Bcast(x_b_p, dc.nlag * dc.F * dc.Class * dc.K, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-   			reverse_expand(x_b_lagMembers,x_b_p, dc.nlag, dc.Class * dc.F, dc.K);
+    			MPI_Bcast(x_b_b, dc.nlag * dc.Class * dc.K, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+   			reverse_expand(x_b_lagMembers,x_b_b, dc.nlag, dc.Class, dc.K);
 		}
+		//free(x_b_b);
+		//x_b_p = NULL;
 		return x_b_lagMembers;	
 }	
 

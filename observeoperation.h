@@ -47,12 +47,12 @@ class obs_operation
                 	/*
                  	 * prepare restart file
                  	 */
-              		if(DA_start == dc.start_date)
-	      		{
 				sprintf(cmd_str, "cp %s %s/ensemble-%.3lu/", fc.restart_f, fc.DA_dir, i );
               			cmd(cmd_str);
-	      		}
-                	/* 
+               		 	
+				//sprintf(cmd_str, "cp /data1/xubx/GEOS-Chem/tools/generate_prior_co2_dir/true_flux/add_1pg/Regions_land.dat %s/ensemble-%.3lu/", fc.restart_f, fc.DA_dir, i );
+              			//cmd(cmd_str);
+			/* 
                  	 * write input.geos file
                  	 */
                		sprintf(cmd_str, "%s/ensemble-%.3lu/input.geos", fc.DA_dir, i);
@@ -67,9 +67,47 @@ class obs_operation
                			cmd(cmd_str, true);
                		else
                			cmd(cmd_str, false);
+			printf("PROCESS %d FINISHED...\n", i);
 			}
+			
         	}// END OF GENERATING y_b for each ensemble member
-		printf("PROCESS %d on %s FINISHED...\n", mpi_rank, mpic.host_name);
+		//printf("PROCESS %d on %s FINISHED...\n", mpi_rank, mpic.host_name);
+	}
+
+	void update_restart(daconfig dc,fileconfig fc, mpi_config mpic, int mpi_rank, statevector<double> scal_x_a,const vector<observation>& obs, const datetime & DA_start, const datetime & DA_end, const datetime & DA_end_lag)
+	{
+		debug("come update");
+		for(size_t i = 0; i < dc.K; ++i)
+		{
+	   	if(size_t(mpi_rank % mpic.size) == (i % mpic.size)){
+			printf("PROCESS UPDATE RESTART%d start handling ensemble-%.3lu...\n", mpi_rank, i);
+
+               		char cmd_str[128];//string buffer of command 
+      
+                	/*
+                 	 * go into the running directory of ensemble-i
+                 	 */
+     			
+                	sprintf(cmd_str, "%s/ensemble-%.3lu/scaling_factor.geos.2x25", fc.DA_dir, i);
+			write_scaling_factor(cmd_str, scal_x_a.get_col(i), dc, fc, datetime(DA_start.str("YYYY-MM-DD 00:00:00")).tau(), DA_end.tau());
+        
+                	/* 
+                 	 * write input.geos file
+                 	 */
+               		sprintf(cmd_str, "%s/ensemble-%.3lu/input.geos", fc.DA_dir, i);
+                 	write_input_geos(cmd_str, obs, DA_start, DA_end, DA_end_lag, fc);
+
+                	/* 
+                 	 * run geos model 
+                 	 */
+               		sprintf(cmd_str, "(cd %s/ensemble-%.3lu; %s ;cd ..;)",fc.DA_dir, i, fc.geos_f);
+               		if(mpi_rank == 0)
+               			cmd(cmd_str, true);
+               		else
+               			cmd(cmd_str, false);
+		    }
+        	}// END OF GENERATING y_b for each ensemble member
+		printf("PROCESS UPDATE RESTART %d on %s FINISHED...\n", mpi_rank, mpic.host_name);
 	}
 
 	void Run_posterior(daconfig dc, fileconfig fc, vector<double> scal_posterior_x_a,OBS_DATA obs, datetime DA_start, datetime DA_end)
@@ -218,7 +256,7 @@ void write_scaling_factor(const string& f, const vector<double>& v, daconfig dc,
         for(int x = 0; x < dc.XSIZE; ++x){
             for(int y = 0; y < dc.YSIZE; ++y){
                 //db[x][y][0] = v[y * dc.XSIZE + x + dc.XSIZE * dc.YSIZE * int((step * k) / length)];
-                db[x][y][0] = v[y * dc.XSIZE + x + dc.XSIZE * dc.YSIZE * k];
+                db[x][y][0] = v[y * dc.XSIZE + x];
             	
 	    }
         }

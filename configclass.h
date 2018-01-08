@@ -70,7 +70,7 @@ struct fileconfig{
 struct observation{
     double lat, lon;
     int geosI,geosJ,alt;
-    datetime t;
+    double tau;
     double value,mdm;
     vector<double> modeled_v;
 };

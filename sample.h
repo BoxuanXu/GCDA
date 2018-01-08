@@ -25,6 +25,17 @@ class Sample{
     		
 		clock_t time_f = clock(),time_s;
             	
+        	FILE *fp = fopen("/data1/xubx/GEOS-Chem/tools/main_experience_P_a_test/zhf_site_geos","r");
+        	//FILE *fp = fopen("/data1/xubx/GEOS-Chem/tools/main_experience_ocean0.5_testregion/zhf_site_geos","r");
+		vector<pair<pair<int, int>, int > > site;
+		int lon,lat,alt;
+		while(fscanf(fp, "%d %d %d", &(lon), &(lat), &(alt)) != EOF){	
+       			pair<int,int> P = pair<int,int>(lon,lat);
+			pair<pair<int,int>, int> PP;
+			PP.first = P,PP.second = alt;
+			site.push_back(PP);
+		}
+		
 		for(size_t i = 0; i < dc.K; ++i) {
                 	char cmd_str[128];//string buffer of command 
                 	/*
@@ -33,16 +44,20 @@ class Sample{
 			
 			//for(datetime start=DA_start;start < DA_end; start += timespan(0,0,0,0,dc.DA_step))
 			//{
-		    	sprintf(cmd_str, "%s/ensemble-%.3lu/stations.%s", fc.DA_dir, i, DA_start.str("YYYYMMDD").c_str());
+			sprintf(cmd_str, "%s/ensemble-%.3lu/%s0000.bpch", fc.DA_dir, i, DA_start.str("YYYYMMDD").c_str());
                     	printf("reading stations output :%s\n", cmd_str);
                     	bpch station(cmd_str);
                     	for(size_t j = 0; j < station.size(); ++j){
                         	if(kmp_match(station[j].category, "IJ-AVG-$") >= 0){
-					buf_mod.geosI = station[j].dim[3];
-					buf_mod.geosJ = station[j].dim[4];
+			    	//for(int i = 0;i<station[j].dim[0];i=i+10)
+			    		//for(int m = 0;m<station[j].dim[1];m=m+10){
+				for(size_t i = 0; i < site.size();++i){	
+					buf_mod.geosI = site[i].first.first;
+					buf_mod.geosJ = site[i].first.second;
 					buf_mod.tau = station[j].tau0;
-					buf_mod.value = station[j].data[0][0][station[j].dim[2] - 1];
+					buf_mod.value = station[j].data[site[i].first.first-1][site[i].first.second-1][site[i].second-1] * 1e6;
 					mod.push_back(buf_mod);
+					}
 				}
                 	}
 		
@@ -64,10 +79,10 @@ class Sample{
     			time_f = Cal_time(time_s);
 			
 			for(size_t j =0; j < obs.size(); ++j){
-				if(obs[j].t.tau() <= (DA_start + timespan(0,0,0,0,dc.DA_length)).tau())
+				if(obs[j].tau <= (DA_start + timespan(0,0,0,0,dc.DA_length)).tau())
 				{
 				if(i == 0)
-					index_v[j] = lookup_obs(ans,obs[j].geosI,obs[j].geosJ,obs[j].t.tau(), 0.25, 0);
+					index_v[j] = lookup_obs(ans,obs[j].geosI,obs[j].geosJ,obs[j].tau, 0.25, 0);
 				if(index_v[j] >= 0)
 					obs[j].modeled_v.push_back(mod[index_v[j]].value);
 				}
@@ -100,7 +115,7 @@ class Sample{
              	 * content of obs
              	 */
             	for(size_t i = 0; i < obs.size(); ++i){
-                	printf("obs-%lu:\n(%d, %d, %d, %s[%lf])-> %.10lf\n", i, obs[i].geosI, obs[i].geosJ, obs[i].alt, obs[i].t.str().c_str(),obs[i].t.tau(), obs[i].value);
+                	printf("obs-%lu:\n(%d, %d, %d, [%lf])-> %.10lf\n", i, obs[i].geosI, obs[i].geosJ, obs[i].alt,obs[i].tau, obs[i].value);
                 	cout << obs[i].modeled_v << endl;
             	}
 	

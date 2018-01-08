@@ -308,9 +308,10 @@ template<typename T1, typename T2>
     }
 */
 
-	/*vector<double> vector_randn( int M, double E, double V)
+	vector<double> vector_randn( int M, double E, double V)
 	{
 		vector<double> rand_vector;
+		srand((unsigned)time(NULL));
 		for(size_t i=0;i<M;++i)
 		{
 			static double V1,V2,S;
@@ -332,7 +333,7 @@ template<typename T1, typename T2>
 			rand_vector.push_back(X * V + E);
 		}
 		return rand_vector;
-	}*/
+	}
 
 double AverageRandom(double min, double max)
 {
@@ -363,7 +364,7 @@ typedef boost::normal_distribution<> NormalDis;
 boost::mt19937 rng(time(0));
 typedef boost::variate_generator<boost::mt19937&, boost::normal_distribution<double> > GenType;
 
-void vector_randn_boost(vector<double>& rand,int M,double E,double V,double min,double max)
+void vector_randn_boost(vector<double>& rand,int M,double E,double V, double mm, double aa)
 {
 	NormalDis dis(E,V);
 	GenType gen(rng,dis);
@@ -371,8 +372,9 @@ void vector_randn_boost(vector<double>& rand,int M,double E,double V,double min,
 	while(M>0)
 	{
 		
-		double temp = gen();
-		if(min <= temp && temp <= max)
+	double temp = gen();
+		//if((min <= temp && temp <= aa) || (temp <= max && mm <= temp))
+		if((temp <= aa) || ( mm <= temp))
 		{
 			rand_re[M-1] = temp;
 			--M;

@@ -10,6 +10,7 @@
 #include "bpch.h"
 #include <Eigen/Dense>
 #include "xg_math_vector.h"
+#include <xg_math_matrix.h>
 using namespace Eigen;
 using namespace std;
 
@@ -36,7 +37,8 @@ int main(int argc, char *argv[])
 	//test.Initialization();
 	//test.Propagate();
 	//bool r = test.save_apri_vector(argv[1]);
-	readvector(argv[1]);
+	//readvector(argv[1]);
+	vector<Tm> rands1(11),rands2(11);
 	/*    ReadConfig(argv[1], DA_config);
     DebugConfig(DA_config);
 	for(size_t i=0;i<5;++i)

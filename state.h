@@ -42,38 +42,34 @@ class statevector: public deque<matrix<Tm> >{
 		void Initialization(daconfig dc, map<int,vector<pair<int,int> > >& regions_index)
 		{
 				
-			MatrixXf cov = get_covariance(dc,regions_index);	
+			/*MatrixXf cov = get_covariance(dc,regions_index);	
 			LLT<MatrixXf> llt(cov);
 			MatrixXf L = llt.matrixL();	
 			matrix<double> C(L.rows(),L.cols());
 			for(size_t i = 0;i < C.nrow();++i)
 				for(size_t j = 0;j < C.ncol();++j)
-					C[i][j] = L(i,j);
+					C[i][j] = L(i,j);*/
 			vector<double> oneMean(_nrow,1.0);
 			for(size_t lag=0;lag< _nlag;++lag)
 			for(size_t k = 0;k < _ncol;++k)
 			{
-				for(size_t f=0;f < dc.F;++f)
-				{
-				//vector<Tm> rands1(200),rands2(29);
-				vector<Tm> rands1(dc.Class);
+				vector<Tm> rands1(11),rands2(11);
+				//vector<Tm> rands1(dc.Class);
 				//vector_randn_boost(rands, cov.nrow(), 0, 1, -1, 1);
-				//matrix<Tm> dot_m = dot(C,rands);
-				//vector_randn_boost(rands1, 200, 0, 0.64, -0.8, 0.8);
-				vector_randn_boost(rands1, dc.Class, 0, 1, -1, 1);
-				matrix<Tm> ans = dot(C,rands1);
-				for(size_t j = 0;j < dc.Class;++j)
-					(*this)[lag][j + dc.Class * f][k] = ans[j][0] + oneMean[j]; 
-				/*for(size_t j = 0;j < 29;++j)
-					(*this)[lag][200 + j + dc.Class * f][k] = rands2[j] + oneMean[200 + j];*/
-			
-				}
+				vector_randn_boost(rands1, 11, 0, 0.25, 0,0);
+				vector_randn_boost(rands2, 11, 0, 0.01, 0, 0);
+				//matrix<Tm> ans = dot(C,rands1);
+			        (*this)[lag][0][k] = 1;	
+				for(size_t j = 0;j < 11;++j)
+					(*this)[lag][j + 1][k] = rands1[j] + 1; 
+				for(size_t j = 0;j < 11;++j)
+					(*this)[lag][j + 12][k] = rands2[j] + 1;
 			}
 		}
 		MatrixXf get_covariance(daconfig dc,map<int,vector<pair<int,int> > >& regions_index)
 		{
 			/*define regions_index*/
-		 	int index[] = {0,1,14,29,37,46,58,67,81,97,107,115,131,229};
+		 	int index[] = {0,1,14,29,37,46,58,67,81,97,107,115,131,230};
 
 			MatrixXf cov(dc.Class,dc.Class);
 			int a_x,a_y,b_x,b_y;
@@ -82,7 +78,7 @@ class statevector: public deque<matrix<Tm> >{
 				if(ct != 1 && ct!=7 && ct != 8 )
 				{
 					int cov_i;
-				       (ct==12)?cov_i = 0.16:cov_i = 0.36;	
+				       (ct==12)?cov_i = 0.16:cov_i = 0.64;	
 					for(size_t i = index[ct];i < index[ct+1];++i)	
 					{
 			    			int index_v = regions_index[i].size() / 2;
@@ -101,15 +97,15 @@ class statevector: public deque<matrix<Tm> >{
 				}
 				for(size_t i = 0;i < dc.Class;++i)
 				{
-				if(i  < 131)
-					cov(i,i) = 0.36;
+				if(i  < 131 && i!=0)
+					cov(i,i) = 0.64;
 				else
 					cov(i,i) = 0.16;
 				}
 			}
-			for(size_t i = 0;i < 229;++i)	
+			for(size_t i = 0;i < 230;++i)	
 			{
-				for(size_t j = 0;j < 229;++j)
+				for(size_t j = 0;j < 230;++j)
 			{
 				cout<<cov(i,j);
 			}	
@@ -117,48 +113,39 @@ class statevector: public deque<matrix<Tm> >{
 			}
 			return cov;
 		}	
-		bool Propagate(daconfig dc,map<int,vector<pair<int,int> > >& regions_index)
+		bool Propagate(daconfig dc)
 		{
 			bool rt = false;
-			if(dc.nlag >= 3)
-			{
-			MatrixXf cov = get_covariance(dc,regions_index);	
-			LLT<MatrixXf> llt(cov);
-			MatrixXf L = llt.matrixL();	
-			matrix<double> C(L.rows(),L.cols());
-			for(size_t i = 0;i < C.nrow();++i)
-				for(size_t j = 0;j < C.ncol();++j)
-					C[i][j] = L(i,j);
-			matrix<Tm> oneMean(_nrow,1,1.0);
+	    		MatrixXf X_b = (*this).transfer(); 
+	    		
+			MatrixXf x_b_bar = X_b.rowwise().mean(); 
+	    		debug(x_b_bar);	
+			for(size_t i = 0; i < X_b.cols(); ++i)
+            		{
+				
+				for(size_t j = 0; j < x_b_bar.rows();++j){
+					X_b(j,i) = X_b(j,i) - x_b_bar(j,0); 
+				} 
+	    		}  
+			
 			matrix<Tm> temp(_nrow, _ncol);
-			if(_nlag>=3)
-			{
-				oneMean = rowmean((*this)[_nlag-2]) + rowmean((*this)[_nlag-3]) + 1.0;
-				oneMean = oneMean / 3.0;
-			}
-			this->pop_front();
+			
+					
 			for(size_t k = 0;k < _ncol;++k)
 			{
-				/*vector<Tm> rands1(200),rands2(29);
-				vector_randn_boost(rands1, 200, 0, 0.64, -0.8, 0.8);
-				vector_randn_boost(rands2, 29, 0, 0.16, -0.4, 0.4);
-				for(size_t j = 0;j < 200;++j)
-					temp[j][k] = rands1[j] + oneMean[0][j]; 
-				for(size_t j = 0;j < 29;++j)
-					temp[200 + j][k] = rands2[j] + oneMean[0][200 + j]; */
+				vector<Tm> rands1(11),rands2(11);
+				vector_randn_boost(rands1, 11, 0, 0.25, 0, 0);
+				vector_randn_boost(rands2, 11, 0, 0.01, 0, 0);
+				(*this)[0][0][k] = 1; 
 
-				vector<Tm> rands1(dc.Class);
-				//vector_randn_boost(rands, cov.nrow(), 0, 1, -1, 1);
-				//matrix<Tm> dot_m = dot(C,rands);
-				//vector_randn_boost(rands1, 200, 0, 0.64, -0.8, 0.8);
-				vector_randn_boost(rands1, dc.Class, 0, 1, -1, 1);
-				matrix<Tm> ans = dot(C,rands1);
-				for(size_t j = 0;j < dc.Class;++j)
-					temp[j][k] = ans[j][0] + oneMean[j][0]; 
+				for(size_t j = 0;j < 11;++j)
+					(*this)[0][j + 1][k] = rands1[j] / 2 + X_b(j + 1,0) / 2 + (x_b_bar(j + 1,0) + 1) / 2; 
+				//for(size_t j = 0;j < 11;++j)
+				//	(*this)[0][j + 1][k] = X_b(j + 1,0) + x_b_bar(j + 1,0); 
+				for(size_t j = 0;j < 11;++j)
+					(*this)[0][j + 12][k] = rands2[j] / 2 + X_b(j + 1,0) / 2 + (x_b_bar(j + 12,0) + 1) /2;
 			}
-			this->push_back(temp);
 			rt = true;	
-			}
 			return rt;		
 		}
             	vector<Tm> get_col(size_t c){
@@ -177,13 +164,14 @@ class statevector: public deque<matrix<Tm> >{
 				for(size_t lag=0;lag< _nlag;++lag)
 					for(size_t i = 0;i < _nrow;++i)
 					ans[i + lag * _nrow + k * _nlag * _nrow] = ((*this)[lag][i][k]);
+			//ans = NULL;
 			return ans;	
 		}
 		MatrixXf transfer()
 		{
 			MatrixXf temp(_nrow * _nlag , _ncol);
-			for(size_t i = 0;i < _ncol;++i)
-				for(size_t lag=0;lag< _nlag;++lag)
+			for(size_t lag=0;lag< _nlag;++lag)
+				for(size_t i = 0;i < _ncol;++i)
 					for(size_t j = 0;j < _nrow;++j)
 					temp(j + _nrow * lag, i) = ((*this)[lag][j][i]);
 			return temp; 
@@ -224,7 +212,7 @@ class statevector: public deque<matrix<Tm> >{
 			NcDim* nmembers = s_f.add_dim("nmembers",_ncol); 
 			NcDim* nstate = s_f.add_dim("nstate",_nrow);
 			//NcVar* meanstate = s_f.add_var("meanstate",ncDouble,nstate,nmembers);
-			NcVar* state = s_f.add_var("apri_state",ncDouble,nlag,nmembers,nstate);
+			NcVar* state = s_f.add_var("apri_state",ncDouble,nlag,nstate,nmembers);
 			s_f.get_var("apri_state")->add_att("dims","3");
 
 			double temp[_nlag * _nrow * _ncol]; 
@@ -232,7 +220,7 @@ class statevector: public deque<matrix<Tm> >{
 				for(size_t i =0;i<_nrow;++i)
 					for(size_t j =0;j<_ncol;++j)
 					temp[lag * _nrow * _ncol+i*_ncol+j] = (*this)[lag][i][j];
-			s_f.get_var("apri_state")->put(temp,_nlag,_ncol,_nrow);	
+			s_f.get_var("apri_state")->put(temp,_nlag,_nrow,_ncol);	
 		 	//free(temp);
 			return 1;		
 		}
@@ -250,7 +238,7 @@ class statevector: public deque<matrix<Tm> >{
 			NcDim* nmembers = s_f.get_dim("nmembers"); 
 			NcDim* nstate = s_f.get_dim("nstate");
 
-			NcVar* state = s_f.add_var("post_state",ncDouble,nlag,nmembers,nstate);
+			NcVar* state = s_f.add_var("post_state",ncDouble,nlag,nstate,nmembers);
 			s_f.get_var("post_state")->add_att("dims","3");
 
 			double temp2[_nlag * _nrow * _ncol]; 
@@ -258,7 +246,7 @@ class statevector: public deque<matrix<Tm> >{
 				for(size_t i =0;i<_nrow;++i)
 					for(size_t j =0;j<_ncol;++j)
 					temp2[lag * _nrow * _ncol+i*_ncol+j] = (*this)[lag][i][j];
-			s_f.get_var("post_state")->put(temp2,_nlag,_ncol,_nrow);	
+			s_f.get_var("post_state")->put(temp2,_nlag,_nrow,_ncol);	
 		 	//free(temp);
 		 	return 1;		
 		}
@@ -270,14 +258,11 @@ class statevector: public deque<matrix<Tm> >{
             		{    
     				for(size_t i = 0; i < dc.K; ++i)
 				{	
-    					for(size_t f = 0; f < dc.F; ++f)
-					{	
 					for(size_t x = 0;x < dc.XSIZE;++x){
 					for(size_t y = 0;y < dc.YSIZE;++y){
-						int index = dc.XSIZE * dc.YSIZE * f + dc.XSIZE * y + x,index2 = regions[y][x] + dc.Class * f;       
+						int index = dc.XSIZE * y + x,index2 = regions[y][x];       
 						scal_x_a(lag,index,i) = (*this)[lag][index2][i];
 		    			}
-					}
 					}
 				}
 	    		}
@@ -330,17 +315,17 @@ template<typename Tm>
 //template<typename Tm>
 	statevector<double> readvector(const char * file_r,daconfig dc)
 	{
-		statevector<double> r_tmp(dc.nlag,dc.Class * dc.F,dc.K);
+		statevector<double> r_tmp(dc.nlag,dc.Class,dc.K);
 		NcFile s_f(file_r, NcFile::ReadOnly);
 		if(!s_f.is_valid())
 		{
 			cout<<"couldn't open file"<<endl;
 		//	return 0;
 		}
-		double temp[dc.nlag * dc.Class * dc.K * dc.F];
-	        s_f.get_var("apri_state")->get(temp,dc.nlag,dc.K,dc.Class * dc.F);	
-		for(size_t i =0;i<dc.nlag * dc.Class * dc.K * dc.F;++i)
-			r_tmp(i / (dc.K * dc.Class * dc.F),(i % (dc.K * dc.Class * dc.F)) % (dc.Class * dc.F),(i % (dc.K * dc.Class * dc.F)) / (dc.Class * dc.F)) = temp[i];
+		double temp[dc.nlag * dc.Class * dc.K];
+	        s_f.get_var("apri_state")->get(temp,dc.nlag,dc.Class,dc.K);	
+		for(size_t i =0;i<dc.nlag * dc.Class * dc.K;++i)
+			r_tmp(i / (dc.K * dc.Class),(i % (dc.K * dc.Class)) / (dc.K),(i % (dc.K * dc.Class)) % (dc.K)) = temp[i];
 		return r_tmp;
 			
 	}	
@@ -348,17 +333,14 @@ template<typename Tm>
 	vector<double> poststate2grid(REGIONS_MAP& regions, MatrixXf& x_b_bar, daconfig dc)
 	{
 			
-            	    vector<double> scal_posterior_x_a(dc.XSIZE * dc.YSIZE * dc.F);
-		 for(size_t f=0;f < dc.F;++f)
-		 {
+            	    vector<double> scal_posterior_x_a(dc.XSIZE * dc.YSIZE);
 
 		    for(size_t x = 0;x < dc.XSIZE;++x){
 		    		for(size_t y = 0;y < dc.YSIZE;++y){
-				int index = dc.XSIZE * dc.YSIZE *f + dc.XSIZE * y + x,index2 = regions[y][x] + dc.Class * f;       
+				int index = dc.XSIZE * y + x,index2 = regions[y][x];       
 	                   		scal_posterior_x_a[index] = x_b_bar(index2,0);   
 				}
             	    	}
-		 }
 		    debug(scal_posterior_x_a);
 		    return scal_posterior_x_a;
 	}
